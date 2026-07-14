@@ -26,6 +26,7 @@
 ├── server.py            # FastAPI: API + отдача WebApp
 ├── bot.py               # бот aiogram (/start, кнопка WebApp, /stats)
 ├── run.py               # единая точка запуска (сервер + бот)
+├── Dockerfile           # сборка для BotHost / любого Docker-хостинга
 ├── requirements.txt
 └── .env.example
 ```

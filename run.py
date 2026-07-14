@@ -16,7 +16,12 @@ import sys
 import uvicorn
 
 from app.config import settings
-from app.database import init_db
+
+
+async def _bootstrap() -> None:
+    """Создаёт таблицы и наполняет БД демо-данными (безопасно при каждом старте)."""
+    from app.seed import seed
+    await seed()
 
 
 async def _run_server() -> None:
@@ -36,7 +41,7 @@ async def _run_bot() -> None:
 
 
 async def _run_all() -> None:
-    await init_db()
+    await _bootstrap()
     await asyncio.gather(_run_server(), _run_bot())
 
 
@@ -49,7 +54,7 @@ def main() -> None:
         return
 
     if mode == "server":
-        asyncio.run(init_db())
+        asyncio.run(_bootstrap())
         uvicorn.run("server:app", host=settings.host, port=settings.port)
         return
 
