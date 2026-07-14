@@ -190,6 +190,24 @@ async def items(ctx=Depends(current_user)):
     return {"items": [service._item_json(i) for i in rows]}
 
 
+# --- Лучшие дропы и таблица лидеров --------------------------------------
+
+@app.get("/api/best-drops")
+async def best_drops(ctx=Depends(current_user)):
+    user, session = ctx
+    drops = await service.best_drops(session, limit=4)
+    await session.commit()
+    return {"drops": drops}
+
+
+@app.get("/api/leaderboard")
+async def leaderboard(ctx=Depends(current_user)):
+    user, session = ctx
+    data = await service.leaderboard(session)
+    await session.commit()
+    return data
+
+
 # --- Статика / WebApp ----------------------------------------------------
 
 app.mount("/static", StaticFiles(directory="static"), name="static")

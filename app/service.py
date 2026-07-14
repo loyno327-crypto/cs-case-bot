@@ -57,8 +57,25 @@ def serialize_user(user: User) -> dict:
         "cases_opened": user.cases_opened,
         "daily_available": daily_available(user),
         "daily_seconds_left": daily_seconds_left(user),
+        "free_case_available": free_case_available(user),
+        "free_case_seconds_left": free_case_seconds_left(user),
         "upgrades": game.upgrades_state(user),
     }
+
+
+# --- Бесплатный кейс (кулдаун) -------------------------------------------
+
+def free_case_available(user: User) -> bool:
+    last = game._aware(user.last_free_case_at)
+    return last is None or (game.now() - last) >= game.FREE_CASE_COOLDOWN
+
+
+def free_case_seconds_left(user: User) -> int:
+    last = game._aware(user.last_free_case_at)
+    if last is None:
+        return 0
+    left = game.FREE_CASE_COOLDOWN - (game.now() - last)
+    return max(int(left.total_seconds()), 0)
 
 
 # --- Ежедневный бонус ----------------------------------------------------
@@ -167,10 +184,18 @@ async def open_case(session: AsyncSession, user: User, case_id: int) -> dict:
     )
     if case is None or not case.items:
         return {"ok": False, "reason": "not_found"}
-    if user.balance < case.price:
-        return {"ok": False, "reason": "not_enough", "price": round(case.price, 2)}
 
-    user.balance -= case.price
+    if case.is_free:
+        # Бесплатный кейс — по кулдауну, без списания монет
+        if not free_case_available(user):
+            return {"ok": False, "reason": "cooldown",
+                    "seconds_left": free_case_seconds_left(user)}
+        user.last_free_case_at = game.now()
+    else:
+        if user.balance < case.price:
+            return {"ok": False, "reason": "not_enough", "price": round(case.price, 2)}
+        user.balance -= case.price
+
     weights = [ci.weight for ci in case.items]
     won: CaseItem = random.choices(case.items, weights=weights, k=1)[0]
     item = won.item
@@ -277,6 +302,8 @@ async def battle(session: AsyncSession, user: User, case_id: int) -> dict:
     )
     if case is None or not case.items:
         return {"ok": False, "reason": "not_found"}
+    if case.is_free:
+        return {"ok": False, "reason": "no_free_battle"}
     if user.balance < case.price:
         return {"ok": False, "reason": "not_enough", "price": round(case.price, 2)}
 
@@ -296,4 +323,53 @@ async def battle(session: AsyncSession, user: User, case_id: int) -> dict:
         "my_item": _item_json(my),
         "bot_item": _item_json(bot),
         "pot": pot,
+    }
+
+
+# --- Лучшие дропы среди реальных игроков --------------------------------
+
+# Показываем только дропы дороже этого порога
+BEST_DROP_MIN_PRICE = 15000.0
+
+
+async def best_drops(session: AsyncSession, limit: int = 4) -> list[dict]:
+    """Последние дорогие предметы, выпавшие реальным игрокам (цена > порога)."""
+    rows = (await session.scalars(
+        select(InventoryItem)
+        .join(Item, InventoryItem.item_id == Item.id)
+        .where(Item.price > BEST_DROP_MIN_PRICE)
+        .options(selectinload(InventoryItem.item), selectinload(InventoryItem.user))
+        .order_by(InventoryItem.acquired_at.desc())
+        .limit(limit)
+    )).all()
+    out = []
+    for r in rows:
+        data = _item_json(r.item)
+        data["owner"] = (r.user.first_name if r.user else None) or "Игрок"
+        out.append(data)
+    return out
+
+
+# --- Таблица лидеров -----------------------------------------------------
+
+async def leaderboard(session: AsyncSession, limit: int = 15) -> dict:
+    """ТОП игроков по уровню и по балансу."""
+    by_level = (await session.scalars(
+        select(User).order_by(User.level.desc(), User.xp.desc()).limit(limit)
+    )).all()
+    by_balance = (await session.scalars(
+        select(User).order_by(User.balance.desc()).limit(limit)
+    )).all()
+
+    def row(u: User) -> dict:
+        return {
+            "first_name": u.first_name,
+            "level": u.level,
+            "balance": round(u.balance, 2),
+            "photo_url": u.photo_url,
+        }
+
+    return {
+        "by_level": [row(u) for u in by_level],
+        "by_balance": [row(u) for u in by_balance],
     }

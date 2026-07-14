@@ -35,6 +35,7 @@ class User(Base):
     # Тайминги
     last_daily_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_income_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_free_case_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     boost_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

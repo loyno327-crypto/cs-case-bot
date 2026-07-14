@@ -32,4 +32,6 @@ const API = {
     apiFetch("/api/items/upgrade", { method: "POST", body: JSON.stringify({ inv_id, target_item_id }) }),
   contract: (inv_ids) => apiFetch("/api/contract", { method: "POST", body: JSON.stringify({ inv_ids }) }),
   battle: (case_id) => apiFetch("/api/battle", { method: "POST", body: JSON.stringify({ case_id }) }),
+  bestDrops: () => apiFetch("/api/best-drops"),
+  leaderboard: () => apiFetch("/api/leaderboard"),
 };

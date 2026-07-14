@@ -27,9 +27,26 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Создаёт таблицы, если их ещё нет."""
+    """Создаёт таблицы, если их ещё нет, и досоздаёт недостающие колонки."""
     # Импорт нужен, чтобы модели зарегистрировались в метаданных Base.
     from app import models  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_migrate)
+
+
+# Лёгкие миграции для SQLite: добавляем недостающие колонки без потери данных.
+# Каждая запись: (таблица, колонка, SQL-тип с DEFAULT при необходимости).
+_MIGRATIONS = [
+    ("users", "last_free_case_at", "DATETIME"),
+]
+
+
+def _migrate(conn) -> None:
+    from sqlalchemy import text
+
+    for table, column, ddl in _MIGRATIONS:
+        cols = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
+        if column not in cols:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))

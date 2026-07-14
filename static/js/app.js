@@ -61,6 +61,12 @@ function startLiveTimers() {
 document.addEventListener("click", async (e) => {
   const t = e.target;
 
+  // Меню «Ещё»
+  if (t.closest("#moreBtn")) { openMoreMenu(); return; }
+  if (t.closest("[data-more='leaderboard']")) { lbTab = "level"; openLeaderboard(); return; }
+  const lbBtn = t.closest("[data-lb]");
+  if (lbBtn) { lbTab = lbBtn.dataset.lb; renderLeaderboard(); return; }
+
   // Навигация по нижнему меню
   const nav = t.closest(".nav-item");
   if (nav) { go(nav.dataset.screen); return; }

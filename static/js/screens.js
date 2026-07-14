@@ -1,16 +1,78 @@
 // Рендеринг экранов. Каждая функция заполняет свой контейнер.
 
 function itemCardHTML(item, extra = "") {
+  const owner = item.owner
+    ? `<div class="owner">${item.owner}</div>`
+    : `<div class="s">${item.subtitle}</div>`;
   return `
     <div class="drop r-${item.rarity}">
       <div class="thumb"><img src="${item.image}" alt="${item.name}" loading="lazy"></div>
       <div class="info">
         <div class="n">${item.name}</div>
-        <div class="s">${item.subtitle}</div>
+        ${owner}
         <div class="p">${fmt(item.price)} ${COIN}</div>
         ${extra}
       </div>
     </div>`;
+}
+
+// ---------- Меню «Ещё»: ТОП игроков ----------
+let lbTab = "level";
+let lbData = null;
+
+async function openMoreMenu() {
+  openModal(`
+    <h3>Ещё</h3>
+    <div class="more-menu">
+      <button class="more-item" data-more="leaderboard">
+        <span class="mi-ic">▤</span>
+        <span><span class="mi-t">ТОП игроков</span><span class="mi-d">Рейтинг по уровню и балансу</span></span>
+      </button>
+    </div>
+    <div class="actions"><button class="btn ghost block" onclick="closeModal()">Закрыть</button></div>
+  `);
+}
+
+async function openLeaderboard() {
+  lbData = null;
+  renderLeaderboard();
+  try { lbData = await API.leaderboard(); } catch (e) { lbData = { by_level: [], by_balance: [] }; }
+  renderLeaderboard();
+}
+
+function renderLeaderboard() {
+  const list = lbData ? (lbTab === "level" ? lbData.by_level : lbData.by_balance) : null;
+  let rows;
+  if (!lbData) {
+    rows = `<div class="loader">Загрузка…</div>`;
+  } else if (!list.length) {
+    rows = `<div class="empty">Пока пусто</div>`;
+  } else {
+    rows = list.map((u, i) => {
+      const rank = i + 1;
+      const medal = rank <= 3 ? `rank-${rank}` : "";
+      const value = lbTab === "level"
+        ? `LVL ${u.level}`
+        : `${fmt(u.balance)} ◎`;
+      const avatar = u.photo_url || "/static/img/avatar.png";
+      return `
+        <div class="lb-row">
+          <div class="lb-rank ${medal}">${rank}</div>
+          <img class="lb-ava" src="${avatar}" alt="">
+          <div class="lb-name">${u.first_name}</div>
+          <div class="lb-val">${value}</div>
+        </div>`;
+    }).join("");
+  }
+  openModal(`
+    <h3>ТОП игроков</h3>
+    <div class="seg lb-seg">
+      <button data-lb="level" class="${lbTab==='level'?'active':''}">По уровню</button>
+      <button data-lb="balance" class="${lbTab==='balance'?'active':''}">По балансу</button>
+    </div>
+    <div class="lb-list">${rows}</div>
+    <div class="actions"><button class="btn ghost block" onclick="closeModal()">Закрыть</button></div>
+  `);
 }
 
 // ---------- HOME ----------
@@ -54,18 +116,22 @@ async function renderHome() {
     </div>
 
     <div class="section-title"><span class="ico">◆</span> Лучшие дропы</div>
-    <div class="drops" id="bestDrops"><div class="loader">Загрузка…</div></div>
+    <div class="drops-row" id="bestDrops"><div class="loader">Загрузка…</div></div>
 
     <div class="section-title"><span class="ico">▣</span> Бесплатные кейсы <span class="link" data-nav="cases">Смотреть все</span></div>
     <div class="case-grid" id="freeCases"><div class="loader">Загрузка…</div></div>
   `;
 
-  // Лучшие дропы (топ по цене)
-  if (!Store.items) { try { Store.items = (await API.items()).items; } catch (e) {} }
-  if (Store.items) {
-    const top = [...Store.items].sort((a, b) => b.price - a.price).slice(0, 6);
-    document.getElementById("bestDrops").innerHTML = top.map((i) => itemCardHTML(i)).join("");
-  }
+  // Лучшие дропы — последние дорогие предметы реальных игроков (> 15 000)
+  try {
+    const drops = (await API.bestDrops()).drops;
+    const box = document.getElementById("bestDrops");
+    if (box) {
+      box.innerHTML = drops.length
+        ? drops.map((i) => itemCardHTML(i)).join("")
+        : `<div class="empty" style="grid-column:1/-1;padding:20px 10px">Пока нет дропов дороже 15 000 ◎</div>`;
+    }
+  } catch (e) {}
 
   // Бесплатные кейсы
   if (!Store.cases) { try { Store.cases = (await API.cases()).cases; } catch (e) {} }
@@ -78,7 +144,15 @@ async function renderHome() {
 
 // ---------- CASES ----------
 function caseCardHTML(c) {
-  const price = c.is_free ? `<span class="free-tag">Бесплатно</span>` : `${fmt(c.price)} ${COIN}`;
+  let price;
+  if (c.is_free) {
+    const ready = Store.state ? Store.state.free_case_available : true;
+    price = ready
+      ? `<span class="free-tag">Бесплатно</span>`
+      : `<span class="cd-tag" data-free-timer>${fmtTime(Store.state.free_case_seconds_left)}</span>`;
+  } else {
+    price = `${fmt(c.price)} ${COIN}`;
+  }
   return `
     <div class="case-card" data-case="${c.id}">
       <div class="cimg"><img src="${c.image}" alt="${c.name}"></div>
@@ -103,7 +177,12 @@ async function openCaseFlow(caseId) {
   let result;
   try { result = await API.openCase(caseId); }
   catch (e) { toast(e.message); return; }
-  if (!result.ok) { toast(result.reason === "not_enough" ? "Недостаточно монет" : "Ошибка"); return; }
+  if (!result.ok) {
+    if (result.reason === "cooldown") toast(`Бесплатный кейс через ${fmtTime(result.seconds_left)}`);
+    else if (result.reason === "not_enough") toast("Недостаточно монет");
+    else toast("Ошибка");
+    return;
+  }
   Store.set(result.state);
 
   const won = result.item;
@@ -223,7 +302,7 @@ async function renderUpgradeTab() {
   const inv = (await API.inventory()).items;
   if (!Store.items) Store.items = (await API.items()).items;
   const body = document.getElementById("upgradeBody");
-  if (!inv.length) { body.innerHTML = `<div class="empty">Инвентарь пуст. Откройте кейсы, чтобы получить предметы для апгрейда.</div>`; return; }
+  if (!inv.length) { body.innerHTML = `<div class="empty">Инвентарь пуст. Откройте кейсы, чтобы получ��ть предметы для апгрейда.</div>`; return; }
 
   const src = inv.find((x) => x.inv_id === selUpgradeInv) || null;
   const targets = Store.items.filter((i) => !src || i.price > src.item?.price || i.price > (src.price || 0));
@@ -277,9 +356,10 @@ async function renderContractTab() {
 async function renderBattleTab() {
   if (!Store.cases) Store.cases = (await API.cases()).cases;
   const body = document.getElementById("upgradeBody");
+  const paidCases = Store.cases.filter((c) => !c.is_free);
   body.innerHTML = `
     <p style="color:var(--muted);font-size:13px;margin:0 2px 10px">Сразись с ботом на кейсе — у кого дороже дроп, тот забирает оба.</p>
-    <div class="case-grid">${Store.cases.map((c) => `
+    <div class="case-grid">${paidCases.map((c) => `
       <div class="case-card" data-battle="${c.id}">
         <div class="cimg"><img src="${c.image}" alt=""></div>
         <div class="cn">${c.name}</div>
