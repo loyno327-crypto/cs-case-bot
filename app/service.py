@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import random
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app import game
 from app.auth import TelegramUser
-from app.models import Case, CaseItem, InventoryItem, Item, User
+from app.models import Case, CaseItem, DropLog, InventoryItem, Item, User
 
 # --- Пользователь --------------------------------------------------------
 
@@ -57,6 +57,8 @@ def serialize_user(user: User) -> dict:
         "cases_opened": user.cases_opened,
         "daily_available": daily_available(user),
         "daily_seconds_left": daily_seconds_left(user),
+        "free_case_available": free_case_available(user),
+        "free_case_seconds_left": free_case_seconds_left(user),
         "upgrades": game.upgrades_state(user),
     }
 
@@ -83,6 +85,21 @@ def claim_daily(user: User) -> dict:
     user.last_daily_at = game.now()
     game.apply_xp(user, 25)
     return {"ok": True, "reward": game.DAILY_BONUS}
+
+
+# --- Бесплатный кейс ---------------------------------------------------------
+
+def free_case_available(user: User) -> bool:
+    last = game._aware(user.last_free_case_at)
+    return last is None or (game.now() - last) >= game.FREE_CASE_COOLDOWN
+
+
+def free_case_seconds_left(user: User) -> int:
+    last = game._aware(user.last_free_case_at)
+    if last is None:
+        return 0
+    left = game.FREE_CASE_COOLDOWN - (game.now() - last)
+    return max(int(left.total_seconds()), 0)
 
 
 # --- Клик ----------------------------------------------------------------
@@ -167,15 +184,20 @@ async def open_case(session: AsyncSession, user: User, case_id: int) -> dict:
     )
     if case is None or not case.items:
         return {"ok": False, "reason": "not_found"}
+    if case.is_free and not free_case_available(user):
+        return {"ok": False, "reason": "cooldown", "seconds_left": free_case_seconds_left(user)}
     if user.balance < case.price:
         return {"ok": False, "reason": "not_enough", "price": round(case.price, 2)}
 
     user.balance -= case.price
+    if case.is_free:
+        user.last_free_case_at = game.now()
     weights = [ci.weight for ci in case.items]
     won: CaseItem = random.choices(case.items, weights=weights, k=1)[0]
     item = won.item
 
     session.add(InventoryItem(user_id=user.id, item_id=item.id))
+    session.add(DropLog(user_id=user.id, item_id=item.id, case_id=case.id))
     user.cases_opened += 1
     game.apply_xp(user, game.XP_PER_CASE)
 
@@ -277,6 +299,8 @@ async def battle(session: AsyncSession, user: User, case_id: int) -> dict:
     )
     if case is None or not case.items:
         return {"ok": False, "reason": "not_found"}
+    if case.is_free:
+        return {"ok": False, "reason": "free_case_disabled"}
     if user.balance < case.price:
         return {"ok": False, "reason": "not_enough", "price": round(case.price, 2)}
 
@@ -297,3 +321,44 @@ async def battle(session: AsyncSession, user: User, case_id: int) -> dict:
         "bot_item": _item_json(bot),
         "pot": pot,
     }
+
+
+# --- Рейтинги и реальные дорогие дропы --------------------------------------
+
+def _user_public_json(user: User) -> dict:
+    return {
+        "id": user.id,
+        "first_name": user.first_name,
+        "username": user.username,
+        "photo_url": user.photo_url,
+        "level": user.level,
+        "balance": round(user.balance, 2),
+    }
+
+
+async def leaderboard(session: AsyncSession, kind: str, limit: int = 10) -> list[dict]:
+    order = User.balance.desc() if kind == "balance" else User.level.desc()
+    rows = (await session.scalars(
+        select(User).order_by(order, User.xp.desc(), User.balance.desc()).limit(limit)
+    )).all()
+    return [_user_public_json(u) for u in rows]
+
+
+async def best_real_drops(session: AsyncSession, limit: int = 4) -> list[dict]:
+    rows = (await session.scalars(
+        select(DropLog)
+        .join(DropLog.item)
+        .where(Item.price > game.BIG_DROP_MIN_PRICE)
+        .options(selectinload(DropLog.item), selectinload(DropLog.user))
+        .order_by(desc(DropLog.created_at))
+        .limit(limit)
+    )).all()
+    return [
+        {
+            "id": row.id,
+            "player": _user_public_json(row.user),
+            "item": _item_json(row.item),
+            "created_at": row.created_at.isoformat(),
+        }
+        for row in rows
+    ]

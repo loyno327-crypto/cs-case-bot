@@ -34,6 +34,7 @@ class User(Base):
 
     # Тайминги
     last_daily_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_free_case_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_income_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     boost_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -101,3 +102,17 @@ class InventoryItem(Base):
 
     user: Mapped["User"] = relationship(back_populates="inventory")
     item: Mapped["Item"] = relationship()
+
+
+class DropLog(Base):
+    __tablename__ = "drop_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("items.id"))
+    case_id: Mapped[int | None] = mapped_column(ForeignKey("cases.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    user: Mapped["User"] = relationship()
+    item: Mapped["Item"] = relationship()
+    case: Mapped["Case"] = relationship()

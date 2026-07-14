@@ -13,6 +13,12 @@ function itemCardHTML(item, extra = "") {
     </div>`;
 }
 
+function realDropCardHTML(drop) {
+  const item = drop.item;
+  const player = drop.player ? playerName(drop.player) : "Игрок";
+  return itemCardHTML(item, `<div class="player">${player}</div>`);
+}
+
 // ---------- HOME ----------
 async function renderHome() {
   const s = Store.state;
@@ -54,17 +60,20 @@ async function renderHome() {
     </div>
 
     <div class="section-title"><span class="ico">◆</span> Лучшие дропы</div>
-    <div class="drops" id="bestDrops"><div class="loader">Загрузка…</div></div>
+    <div class="drops compact-row" id="bestDrops"><div class="loader">Загрузка…</div></div>
 
     <div class="section-title"><span class="ico">▣</span> Бесплатные кейсы <span class="link" data-nav="cases">Смотреть все</span></div>
     <div class="case-grid" id="freeCases"><div class="loader">Загрузка…</div></div>
   `;
 
-  // Лучшие дропы (топ по цене)
-  if (!Store.items) { try { Store.items = (await API.items()).items; } catch (e) {} }
-  if (Store.items) {
-    const top = [...Store.items].sort((a, b) => b.price - a.price).slice(0, 6);
-    document.getElementById("bestDrops").innerHTML = top.map((i) => itemCardHTML(i)).join("");
+  // Последние реальные дорогие дропы игроков
+  try {
+    const drops = (await API.bestDrops()).drops;
+    document.getElementById("bestDrops").innerHTML = drops.length
+      ? drops.map((d) => realDropCardHTML(d)).join("")
+      : `<div class="empty" style="grid-column:1/-1;padding:20px 0">Пока нет дропов дороже 15 000 ◎</div>`;
+  } catch (e) {
+    document.getElementById("bestDrops").innerHTML = `<div class="empty" style="grid-column:1/-1;padding:20px 0">Нет данных</div>`;
   }
 
   // Бесплатные кейсы
@@ -78,7 +87,10 @@ async function renderHome() {
 
 // ---------- CASES ----------
 function caseCardHTML(c) {
-  const price = c.is_free ? `<span class="free-tag">Бесплатно</span>` : `${fmt(c.price)} ${COIN}`;
+  const freeLocked = c.is_free && Store.state && !Store.state.free_case_available;
+  const price = c.is_free
+    ? `<span class="free-tag" data-free-case-timer>${freeLocked ? fmtTime(Store.state.free_case_seconds_left) : "Бесплатно"}</span>`
+    : `${fmt(c.price)} ${COIN}`;
   return `
     <div class="case-card" data-case="${c.id}">
       <div class="cimg"><img src="${c.image}" alt="${c.name}"></div>
@@ -98,12 +110,20 @@ async function renderCases() {
 async function openCaseFlow(caseId) {
   const c = Store.cases.find((x) => x.id === caseId);
   if (!c) return;
+  if (c.is_free && Store.state && !Store.state.free_case_available) {
+    toast(`Бесплатный кейс через ${fmtTime(Store.state.free_case_seconds_left)}`);
+    return;
+  }
   if (!c.is_free && Store.state.balance < c.price) { toast("Недостаточно монет"); return; }
 
   let result;
   try { result = await API.openCase(caseId); }
   catch (e) { toast(e.message); return; }
-  if (!result.ok) { toast(result.reason === "not_enough" ? "Недостаточно монет" : "Ошибка"); return; }
+  if (!result.ok) {
+    if (result.reason === "cooldown") toast(`Бесплатный кейс через ${fmtTime(result.seconds_left)}`);
+    else toast(result.reason === "not_enough" ? "Недостаточно монет" : "Ошибка");
+    return;
+  }
   Store.set(result.state);
 
   const won = result.item;
@@ -276,16 +296,17 @@ async function renderContractTab() {
 
 async function renderBattleTab() {
   if (!Store.cases) Store.cases = (await API.cases()).cases;
+  const battleCases = Store.cases.filter((c) => !c.is_free);
   const body = document.getElementById("upgradeBody");
   body.innerHTML = `
     <p style="color:var(--muted);font-size:13px;margin:0 2px 10px">Сразись с ботом на кейсе — у кого дороже дроп, тот забирает оба.</p>
-    <div class="case-grid">${Store.cases.map((c) => `
+    <div class="case-grid">${battleCases.map((c) => `
       <div class="case-card" data-battle="${c.id}">
         <div class="cimg"><img src="${c.image}" alt=""></div>
         <div class="cn">${c.name}</div>
-        <div class="cp">${c.is_free ? '<span class="free-tag">Бесплатно</span>' : fmt(c.price)+' ◎'}</div>
+        <div class="cp">${fmt(c.price)} ◎</div>
         <button class="btn block" style="margin-top:8px">В бой</button>
-      </div>`).join("")}</div>`;
+      </div>`).join("") || '<div class="empty">Нет платных кейсов для сражений</div>'}</div>`;
 }
 
 // ---------- PROFILE ----------

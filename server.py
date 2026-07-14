@@ -190,6 +190,24 @@ async def items(ctx=Depends(current_user)):
     return {"items": [service._item_json(i) for i in rows]}
 
 
+@app.get("/api/leaderboard")
+async def leaderboard(kind: str = "level", ctx=Depends(current_user)):
+    user, session = ctx
+    if kind not in {"level", "balance"}:
+        raise HTTPException(status_code=400, detail="Unknown leaderboard kind")
+    rows = await service.leaderboard(session, kind)
+    await session.commit()
+    return {"players": rows}
+
+
+@app.get("/api/drops/best")
+async def best_drops(ctx=Depends(current_user)):
+    user, session = ctx
+    rows = await service.best_real_drops(session)
+    await session.commit()
+    return {"drops": rows}
+
+
 # --- Статика / WebApp ----------------------------------------------------
 
 app.mount("/static", StaticFiles(directory="static"), name="static")

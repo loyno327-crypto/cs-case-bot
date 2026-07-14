@@ -83,6 +83,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   width: 40px; height: 40px; border-radius: 12px; background: var(--card);
   display: grid; place-items: center; box-shadow: var(--shadow); color: var(--muted);
 }
+.more-btn { width: auto; min-width: 48px; padding: 0 10px; font-size: 12px; font-weight: 800; color: var(--text); }
 .coin { color: var(--gold); }
 
 /* ---------- Layout ---------- */
@@ -152,6 +153,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 /* ---------- Drops grid ---------- */
 .drops { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.drops.compact-row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .drop {
   background: var(--card); border-radius: var(--radius-sm); box-shadow: var(--shadow); overflow: hidden;
   border-top: 3px solid var(--r-common);
@@ -162,6 +164,12 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .drop .n { font-weight: 700; font-size: 13px; }
 .drop .s { color: var(--muted); font-size: 11px; }
 .drop .p { display: flex; align-items: center; gap: 5px; font-weight: 700; margin-top: 6px; font-size: 13px; }
+.compact-row .drop .thumb { aspect-ratio: 1; padding: 5px; }
+.compact-row .drop .info { padding: 6px; }
+.compact-row .drop .n { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compact-row .drop .s { font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compact-row .drop .p { font-size: 10px; margin-top: 4px; }
+.compact-row .drop .player { color: var(--muted); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
 
 .r-common { border-color: var(--r-common); }
 .r-uncommon { border-color: var(--r-uncommon); }
@@ -236,6 +244,15 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .modal .muted { color: var(--muted); font-size: 13px; }
 .modal .actions { display: flex; gap: 10px; margin-top: 16px; }
 .modal .actions .btn { flex: 1; }
+.leader-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+.leader-tabs .btn { padding: 9px 10px; box-shadow: none; }
+.leader-tabs .btn.ghost { color: var(--muted); }
+.leader-list { display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.leader-row { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 8px; background: var(--card-2); border-radius: 10px; padding: 9px; }
+.leader-rank { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--green-soft); color: var(--green); font-size: 12px; font-weight: 800; }
+.leader-name { font-size: 13px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leader-meta { color: var(--muted); font-size: 11px; }
+.leader-value { font-weight: 800; font-size: 12px; }
 
 /* ---------- Inventory ---------- */
 .inv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }

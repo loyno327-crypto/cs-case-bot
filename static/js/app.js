@@ -46,12 +46,19 @@ function startLiveTimers() {
     const s = Store.state;
     if (!s) return;
     if (s.daily_seconds_left > 0) s.daily_seconds_left--;
+    if (s.free_case_seconds_left > 0) {
+      s.free_case_seconds_left--;
+      if (s.free_case_seconds_left <= 0) s.free_case_available = true;
+    }
     if (s.boost_active && s.boost_seconds_left > 0) {
       s.boost_seconds_left--;
       if (s.boost_seconds_left <= 0) { s.boost_active = false; s.income_multiplier = 1; }
     }
     const dt = document.getElementById("dailyTimer");
     if (dt) dt.textContent = fmtTime(s.daily_seconds_left);
+    document.querySelectorAll("[data-free-case-timer]").forEach((el) => {
+      el.textContent = s.free_case_available ? "Бесплатно" : fmtTime(s.free_case_seconds_left);
+    });
     const boostBtn = document.getElementById("boostBtn");
     if (boostBtn && s.boost_active) boostBtn.textContent = fmtTime(s.boost_seconds_left);
   }, 1000);
@@ -64,6 +71,11 @@ document.addEventListener("click", async (e) => {
   // Навигация по нижнему меню
   const nav = t.closest(".nav-item");
   if (nav) { go(nav.dataset.screen); return; }
+
+  if (t.closest("#moreBtn")) { openMoreMenu(); return; }
+
+  const leaderBtn = t.closest("[data-leader]");
+  if (leaderBtn) { renderLeaderboard(leaderBtn.dataset.leader); return; }
 
   // Кнопки с data-nav
   const navBtn = t.closest("[data-nav]");
@@ -150,7 +162,10 @@ document.addEventListener("click", async (e) => {
   const battleCard = t.closest("[data-battle]");
   if (battleCard) {
     const r = await API.battle(Number(battleCard.dataset.battle));
-    if (!r.ok) { toast(r.reason === "not_enough" ? "Недостаточно монет" : "Ошибка"); return; }
+    if (!r.ok) {
+      toast(r.reason === "not_enough" ? "Недостаточно монет" : "Этот кейс недоступен в бою");
+      return;
+    }
     Store.set(r.state); haptic(r.win ? "success" : "medium");
     openModal(`
       <h3>${r.win ? "Победа! 🟢" : "Поражение"}</h3>

@@ -28,6 +28,8 @@ const API = {
   inventory: () => apiFetch("/api/inventory"),
   sell: (inv_id) => apiFetch("/api/inventory/sell", { method: "POST", body: JSON.stringify({ inv_id }) }),
   items: () => apiFetch("/api/items"),
+  leaderboard: (kind) => apiFetch(`/api/leaderboard?kind=${encodeURIComponent(kind)}`),
+  bestDrops: () => apiFetch("/api/drops/best"),
   upgradeItem: (inv_id, target_item_id) =>
     apiFetch("/api/items/upgrade", { method: "POST", body: JSON.stringify({ inv_id, target_item_id }) }),
   contract: (inv_ids) => apiFetch("/api/contract", { method: "POST", body: JSON.stringify({ inv_ids }) }),

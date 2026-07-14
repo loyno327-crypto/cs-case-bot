@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy import text
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
@@ -33,3 +34,8 @@ async def init_db() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if settings.database_url.startswith("sqlite"):
+            columns = await conn.execute(text("PRAGMA table_info(users)"))
+            existing = {row[1] for row in columns}
+            if "last_free_case_at" not in existing:
+                await conn.execute(text("ALTER TABLE users ADD COLUMN last_free_case_at DATETIME"))

@@ -9,16 +9,16 @@ from app.models import User
 
 # Базовые значения дохода
 BASE_CLICK = 1.0          # доход за клик на 1 уровне
-CLICK_STEP = 0.5          # прибавка за каждый уровень "Доход за клик"
+CLICK_STEP = 0.35         # прибавка за каждый уровень "Доход за клик"
 BASE_PER_SECOND = 0.0
-PER_SECOND_STEP = 5.0     # прибавка за каждый уровень "Доход в секунду"
-AUTOCLICK_STEP = 1.0      # автоклик добавляет доход в секунду
+PER_SECOND_STEP = 0.25    # прибавка за каждый уровень "Доход в секунду"
+AUTOCLICK_STEP = 0.15     # автоклик добавляет доход в секунду
 
 # Стоимость апгрейда: base * (growth ** level)
 UPGRADE_CONFIG = {
-    "click": {"base": 50, "growth": 1.15, "step": CLICK_STEP, "title": "Доход за клик"},
-    "income": {"base": 100, "growth": 1.18, "step": PER_SECOND_STEP, "title": "Доход в секунду"},
-    "autoclick": {"base": 500, "growth": 1.25, "step": AUTOCLICK_STEP, "title": "Автоклик"},
+    "click": {"base": 75, "growth": 1.22, "step": CLICK_STEP, "title": "Доход за клик"},
+    "income": {"base": 300, "growth": 1.28, "step": PER_SECOND_STEP, "title": "Доход в секунду"},
+    "autoclick": {"base": 900, "growth": 1.35, "step": AUTOCLICK_STEP, "title": "Автоклик"},
 }
 
 # Ежедневный бонус растёт со стриком (но здесь простой вариант — фикс за день)
@@ -29,6 +29,9 @@ DAILY_COOLDOWN = timedelta(hours=24)
 BOOST_MULTIPLIER = 2.0
 BOOST_DURATION = timedelta(minutes=15)
 BOOST_COST = 2000.0
+
+FREE_CASE_COOLDOWN = timedelta(minutes=5)
+BIG_DROP_MIN_PRICE = 15000.0
 
 # XP
 XP_PER_CLICK = 1
