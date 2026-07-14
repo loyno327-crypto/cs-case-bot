@@ -177,8 +177,6 @@ function renderClicker() {
   const el = document.getElementById("screen-clicker");
   const boostLabel = s.boost_active ? fmtTime(s.boost_seconds_left) : "Активировать x2";
   el.innerHTML = `
-    <div class="clicker-head"><span class="ti">☝</span><div><h2>Кликер</h2><p>Кликай и зарабатывай монеты!</p></div></div>
-
     <div class="click-zone">
       <div class="click-btn" id="clickBtn">CS</div>
       <div class="balance-big"><span class="coin-badge">◎</span> <span id="clickBalance">${fmt(s.balance)}</span></div>
