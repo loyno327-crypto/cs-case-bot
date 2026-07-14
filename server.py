@@ -66,6 +66,10 @@ class ContractBody(BaseModel):
     inv_ids: list[int]
 
 
+class BattleBody(BaseModel):
+    case_id: int
+
+
 # --- Эндпоинты состояния -------------------------------------------------
 
 @app.get("/api/state")
@@ -188,6 +192,24 @@ async def items(ctx=Depends(current_user)):
     rows = (await session.scalars(select(Item).order_by(Item.price))).all()
     await session.commit()
     return {"items": [service._item_json(i) for i in rows]}
+
+
+# --- ТОП игроков / последние дропы -------------------------------------
+
+@app.get("/api/top-players")
+async def top_players(sort: str = "level", ctx=Depends(current_user)):
+    user, session = ctx
+    result = await service.get_top_players(session, sort)
+    await session.commit()
+    return {"players": result}
+
+
+@app.get("/api/recent-drops")
+async def recent_drops(ctx=Depends(current_user)):
+    user, session = ctx
+    result = await service.get_recent_drops(session, min_price=15000.0)
+    await session.commit()
+    return {"drops": result}
 
 
 # --- Статика / WebApp ----------------------------------------------------

@@ -11,6 +11,7 @@ from app import game
 from app.auth import TelegramUser
 from app.models import Case, CaseItem, InventoryItem, Item, User
 
+
 # --- Пользователь --------------------------------------------------------
 
 async def get_or_create_user(session: AsyncSession, tg: TelegramUser) -> User:
@@ -57,6 +58,8 @@ def serialize_user(user: User) -> dict:
         "cases_opened": user.cases_opened,
         "daily_available": daily_available(user),
         "daily_seconds_left": daily_seconds_left(user),
+        "free_case_available": free_case_available(user, 0),
+        "free_case_seconds_left": free_case_seconds_left(user),
         "upgrades": game.upgrades_state(user),
     }
 
@@ -167,10 +170,16 @@ async def open_case(session: AsyncSession, user: User, case_id: int) -> dict:
     )
     if case is None or not case.items:
         return {"ok": False, "reason": "not_found"}
-    if user.balance < case.price:
-        return {"ok": False, "reason": "not_enough", "price": round(case.price, 2)}
 
-    user.balance -= case.price
+    if case.is_free:
+        if not free_case_available(user, case.id):
+            return {"ok": False, "reason": "cooldown", "seconds_left": free_case_seconds_left(user)}
+        user.last_free_case_at = game.now()
+    else:
+        if user.balance < case.price:
+            return {"ok": False, "reason": "not_enough", "price": round(case.price, 2)}
+        user.balance -= case.price
+
     weights = [ci.weight for ci in case.items]
     won: CaseItem = random.choices(case.items, weights=weights, k=1)[0]
     item = won.item
@@ -268,6 +277,57 @@ async def contract(session: AsyncSession, user: User, inv_ids: list[int]) -> dic
 
 
 # --- Сражения (1 на 1 против бота на выбранном кейсе) --------------------
+
+async def get_top_players(session: AsyncSession, sort: str = "level") -> list[dict]:
+    """ТОП-10 игроков по уровню или балансу."""
+    order = User.level.desc() if sort == "level" else User.balance.desc()
+    rows = (await session.scalars(select(User).order_by(order).limit(10))).all()
+    result = []
+    for i, u in enumerate(rows, 1):
+        result.append({
+            "rank": i,
+            "first_name": u.first_name or "Player",
+            "username": u.username,
+            "level": u.level,
+            "balance": round(u.balance, 2),
+            "photo_url": u.photo_url,
+        })
+    return result
+
+
+async def get_recent_drops(session: AsyncSession, min_price: float = 15000.0) -> list[dict]:
+    """Последние 4 дропа дороже min_price среди всех игроков."""
+    rows = (await session.scalars(
+        select(InventoryItem)
+        .join(InventoryItem.item)
+        .join(InventoryItem.user)
+        .where(Item.price >= min_price)
+        .order_by(InventoryItem.acquired_at.desc())
+        .limit(4)
+        .options(selectinload(InventoryItem.item), selectinload(InventoryItem.user))
+    )).all()
+    result = []
+    for r in rows:
+        result.append({
+            **_item_json(r.item),
+            "player_name": r.user.first_name or "Player",
+        })
+    return result
+
+
+def free_case_available(user: User, case_id: int) -> bool:
+    """Проверяет, прошло ли 5 минут с последнего открытия бесплатного кейса."""
+    last = game._aware(user.last_free_case_at)
+    return last is None or (game.now() - last) >= game.FREE_CASE_COOLDOWN
+
+
+def free_case_seconds_left(user: User) -> int:
+    last = game._aware(user.last_free_case_at)
+    if last is None:
+        return 0
+    left = game.FREE_CASE_COOLDOWN - (game.now() - last)
+    return max(int(left.total_seconds()), 0)
+
 
 async def battle(session: AsyncSession, user: User, case_id: int) -> dict:
     case = await session.scalar(

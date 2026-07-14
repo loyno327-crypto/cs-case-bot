@@ -60,11 +60,24 @@ async function renderHome() {
     <div class="case-grid" id="freeCases"><div class="loader">Загрузка…</div></div>
   `;
 
-  // Лучшие дропы (топ по цене)
-  if (!Store.items) { try { Store.items = (await API.items()).items; } catch (e) {} }
-  if (Store.items) {
-    const top = [...Store.items].sort((a, b) => b.price - a.price).slice(0, 6);
-    document.getElementById("bestDrops").innerHTML = top.map((i) => itemCardHTML(i)).join("");
+  // Лучшие дропы — последние реальные дропы игроков дороже 15000
+  try {
+    const dropsData = await API.recentDrops();
+    const drops = dropsData.drops || [];
+    const box = document.getElementById("bestDrops");
+    if (drops.length) {
+      box.innerHTML = drops.slice(0, 4).map((d) => `
+        <div class="best-drop-card r-${d.rarity}">
+          <div class="bd-img"><img src="${d.image}" alt="${d.name}" loading="lazy"></div>
+          <div class="bd-name">${d.name}</div>
+          <div class="bd-player">${d.player_name}</div>
+          <div class="bd-price">${fmt(d.price)} <span class="coin">◎</span></div>
+        </div>`).join("");
+    } else {
+      box.innerHTML = `<div class="empty" style="grid-column:1/-1">Пока нет дропов дороже 15 000 ◎</div>`;
+    }
+  } catch (e) {
+    document.getElementById("bestDrops").innerHTML = `<div class="empty" style="grid-column:1/-1">Ошибка загрузки</div>`;
   }
 
   // Бесплатные кейсы
@@ -103,7 +116,14 @@ async function openCaseFlow(caseId) {
   let result;
   try { result = await API.openCase(caseId); }
   catch (e) { toast(e.message); return; }
-  if (!result.ok) { toast(result.reason === "not_enough" ? "Недостаточно монет" : "Ошибка"); return; }
+  if (!result.ok) {
+    if (result.reason === "cooldown") {
+      toast(`Следующее открытие через ${fmtTime(result.seconds_left)}`);
+    } else {
+      toast(result.reason === "not_enough" ? "Недостаточно монет" : "Ошибка");
+    }
+    return;
+  }
   Store.set(result.state);
 
   const won = result.item;
@@ -277,13 +297,14 @@ async function renderContractTab() {
 async function renderBattleTab() {
   if (!Store.cases) Store.cases = (await API.cases()).cases;
   const body = document.getElementById("upgradeBody");
+  const paidCases = Store.cases.filter((c) => !c.is_free);
   body.innerHTML = `
     <p style="color:var(--muted);font-size:13px;margin:0 2px 10px">Сразись с ботом на кейсе — у кого дороже дроп, тот забирает оба.</p>
-    <div class="case-grid">${Store.cases.map((c) => `
+    <div class="case-grid">${paidCases.map((c) => `
       <div class="case-card" data-battle="${c.id}">
         <div class="cimg"><img src="${c.image}" alt=""></div>
         <div class="cn">${c.name}</div>
-        <div class="cp">${c.is_free ? '<span class="free-tag">Бесплатно</span>' : fmt(c.price)+' ◎'}</div>
+        <div class="cp">${fmt(c.price)} ◎</div>
         <button class="btn block" style="margin-top:8px">В бой</button>
       </div>`).join("")}</div>`;
 }

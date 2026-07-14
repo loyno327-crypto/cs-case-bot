@@ -34,6 +34,7 @@ class User(Base):
 
     # Тайминги
     last_daily_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_free_case_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_income_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     boost_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -99,5 +100,5 @@ class InventoryItem(Base):
     item_id: Mapped[int] = mapped_column(ForeignKey("items.id"))
     acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-    user: Mapped["User"] = relationship(back_populates="inventory")
+    user: Mapped["User"] = relationship(back_populates="inventory", lazy="select")
     item: Mapped["Item"] = relationship()

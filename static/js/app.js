@@ -224,6 +224,50 @@ async function flushTaps() {
   } catch (e) { /* игнорируем сетевые сбои тапов */ }
 }
 
+// ---------- Подменю "Ещё" ----------
+document.getElementById("moreBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const menu = document.getElementById("moreMenu");
+  const btn = document.getElementById("moreBtn");
+  const isHidden = menu.hidden;
+  menu.hidden = !isHidden;
+  btn.setAttribute("aria-expanded", String(isHidden));
+});
+document.addEventListener("click", () => {
+  const menu = document.getElementById("moreMenu");
+  if (!menu.hidden) {
+    menu.hidden = true;
+    document.getElementById("moreBtn").setAttribute("aria-expanded", "false");
+  }
+});
+
+async function openTopModal(sort) {
+  document.getElementById("moreMenu").hidden = true;
+  openModal(`<div class="loader">Загрузка…</div>`);
+  try {
+    const data = await API.topPlayers(sort);
+    const players = data.players || [];
+    const title = sort === "level" ? "ТОП по уровню" : "ТОП по балансу";
+    const rows = players.map((p) => `
+      <div class="top-row">
+        <span class="top-rank">#${p.rank}</span>
+        <img class="top-avatar" src="${p.photo_url || "/static/img/avatar.png"}" alt="">
+        <span class="top-name">${p.first_name}</span>
+        <span class="top-val">${sort === "level" ? "LVL " + p.level : fmt(p.balance) + " ◎"}</span>
+      </div>`).join("");
+    document.getElementById("modalContent").innerHTML = `
+      <h3>${title}</h3>
+      <div class="top-list">${rows || '<div class="empty">Нет данных</div>'}</div>
+      <div class="actions"><button class="btn block" onclick="closeModal()">Закрыть</button></div>`;
+  } catch (e) {
+    document.getElementById("modalContent").innerHTML = `<div class="empty">Ошибка загрузки</div>
+      <div class="actions"><button class="btn block" onclick="closeModal()">Закрыть</button></div>`;
+  }
+}
+
+document.getElementById("topLevelBtn").addEventListener("click", () => openTopModal("level"));
+document.getElementById("topBalanceBtn").addEventListener("click", () => openTopModal("balance"));
+
 // ---------- Старт ----------
 (async function init() {
   initTelegram();
